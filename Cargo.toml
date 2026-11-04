@@ -1,0 +1,15 @@
+[package]
+name = "divs-rs"
+version = "0.1.0"
+edition = "2024"
+
+default-run = "divs-rs"
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+dotenvy = "0.15.7"
+jiff = "0.2.38"
+polars = { version = "0.55.2", features = ["dtype-array", "is_in", "json", "lazy", "offset_by", "parquet", "pivot", "range", "strings", "temporal", "timezones"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+ureq = { version = "3.5.0", features = ["json"] }
