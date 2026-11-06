@@ -1,5 +1,6 @@
 use crate::filters::DefensiveInvesting;
 use polars::prelude::*;
+use std::fs::File;
 
 pub fn calculate() -> Result<(), Box<dyn std::error::Error>> {
     let info_lf = LazyFrame::scan_parquet("stock_info.parquet".into(), Default::default())?;
@@ -65,13 +66,16 @@ pub fn calculate() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("POLARS_FMT_MAX_COLS", "-1");
     }
 
-    println!(
-        "{:?}",
-        res_lf.collect()?.sort(
+    let mut df = res_lf
+        .sort(
             ["stock_id"],
-            SortMultipleOptions::new().with_order_descending(false)
+            SortMultipleOptions::new().with_order_descending(false),
         )
-    );
+        .collect()?;
+
+    println!("{:?}", df);
+    let writer = File::create("safe_price.parquet")?;
+    ParquetWriter::new(writer).finish(&mut df)?;
 
     Ok(())
 }

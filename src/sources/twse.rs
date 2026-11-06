@@ -31,3 +31,37 @@ pub fn fetch_company_info() -> Result<(), Box<dyn std::error::Error>> {
     ParquetWriter::new(writer).finish(&mut df)?;
     Ok(())
 }
+
+pub fn fetch_daily_price() -> Result<LazyFrame, Box<dyn std::error::Error>> {
+    let uri = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_AVG_ALL";
+
+    /*
+     * NOTE:
+     * 實際使用中若有遇到網路問題，會增加重試機制。
+     * 雖然很簡單，但我很懶，目前不做。
+     */
+    let mut response = ureq::get(uri).call()?;
+    let inner = response.body_mut().read_to_vec()?;
+
+    let reader = Cursor::new(inner);
+    let df = JsonReader::new(reader).finish()?;
+
+    let lf = df
+        .lazy()
+        .with_columns(vec![
+            when(col("ClosingPrice").is_empty(true).not())
+                .then(col("ClosingPrice"))
+                .otherwise(col("MonthlyAveragePrice"))
+                .alias("Price"),
+        ])
+        .with_columns(vec![
+            col("Price")
+                .str()
+                .strip_chars(lit(NULL))
+                .cast(DataType::Float64),
+        ])
+        .drop_nulls(Some(cols(["Price"])))
+        .select([col("Code").alias("stock_id"), col("Price")]);
+
+    Ok(lf)
+}
