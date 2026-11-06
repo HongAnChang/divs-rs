@@ -28,4 +28,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: target/release/divs-rs
+          files: |
+              target/release/01-fetch-company-info
+              target/release/02-fetch-financial-data
+              target/release/03-get-safe-price
+              target/release/04-daily-check
