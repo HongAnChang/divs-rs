@@ -8,43 +8,42 @@ fn get_date_expr() -> Expr {
         .with_time_zone(tz::offset(8).to_time_zone())
         .date();
 
-    if now < civil::date(now.year(), 4, 1) {
-        return lit(format!("{}-09-30", now.year() - 1));
-    } else if now < civil::date(now.year(), 5, 16) {
-        return lit(format!("{}-12-31", now.year() - 1));
-    } else if now < civil::date(now.year(), 8, 15) {
-        return lit(format!("{}-03-31", now.year()));
-    } else if now < civil::date(now.year(), 11, 15) {
-        return lit(format!("{}-06-30", now.year()));
-    }
+    let current_year = now.year();
 
-    lit(format!("{}-09-30", now.year()))
+    let (y, m, d) = if now < civil::date(current_year, 4, 1) {
+        (current_year - 1, 9, 30)
+    } else if now < civil::date(current_year, 5, 16) {
+        (current_year - 1, 12, 31)
+    } else if now < civil::date(current_year, 8, 15) {
+        (current_year, 3, 31)
+    } else if now < civil::date(current_year, 11, 15) {
+        (current_year, 6, 30)
+    } else {
+        (current_year, 9, 30)
+    };
+
+    let args = DatetimeArgs::new(lit(y), lit(m), lit(d));
+    datetime(args).cast(DataType::Date)
 }
 
-pub fn filter(lf: LazyFrame) -> LazyFrame {
-    lf.sort(
-        ["stock_id", "date"],
-        SortMultipleOptions::new().with_order_descending_multi([false, true]),
-    )
-    .unique(Some(cols(["stock_id"])), UniqueKeepStrategy::First)
-    .filter(
-        col("date")
-            .gt_eq(get_date_expr())
-            .and(
-                col("CurrentAssets")
-                    .fill_null(0)
-                    .gt_eq(col("CurrentLiabilities").fill_null(0) * lit(MIN_CURRENT_RATIO)),
-            )
-            .and(
-                (col("CurrentAssets").fill_null(0) - col("CurrentLiabilities").fill_null(0))
-                    .gt_eq(col("NoncurrentLiabilities").fill_null(0)),
-            ),
-    )
-    .select([
-        col("stock_id"),
-        col("EquityAttributableToOwnersOfParent"),
-        col("CapitalStock"),
-        col("OrdinaryShare"),
-        col("NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries"),
-    ])
+pub fn filter(lf: LazyFrame) -> PolarsResult<LazyFrame> {
+    let expected_date = get_date_expr();
+
+    let lf = lf
+        .with_columns(vec![col("date").str().to_date(Default::default())])
+        .filter(col("date").eq(col("date").max().over([col("stock_id")])?))
+        .filter(col("date").gt_eq(expected_date))
+        .filter(col("CurrentAssets").gt_eq(col("CurrentLiabilities") * lit(MIN_CURRENT_RATIO)))
+        .filter(
+            (col("CurrentAssets") - col("CurrentLiabilities")).gt_eq(col("NoncurrentLiabilities")),
+        )
+        .select([
+            col("stock_id"),
+            col("EquityAttributableToOwnersOfParent"),
+            col("CapitalStock"),
+            col("OrdinaryShare"),
+            col("NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries"),
+        ]);
+
+    Ok(lf)
 }

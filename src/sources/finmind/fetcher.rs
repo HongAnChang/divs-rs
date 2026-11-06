@@ -10,7 +10,7 @@ fn get_start_date() -> String {
 }
 
 fn build_request(
-    symbol: &str,
+    stock_id: &str,
     token: &Option<String>,
     dataset: &str,
 ) -> RequestBuilder<WithoutBody> {
@@ -24,7 +24,7 @@ fn build_request(
         request = request.header("Authorization", format!("Bearer {}", t));
     }
 
-    request.query("data_id", symbol)
+    request.query("data_id", stock_id)
 }
 
 pub fn fetch_financial_data(dataset: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -33,11 +33,11 @@ pub fn fetch_financial_data(dataset: &str) -> Result<(), Box<dyn std::error::Err
 
     let df = LazyFrame::scan_parquet("stock_info.parquet".into(), Default::default())?
         .filter(col("industry").is_in(other, false).not())
-        .select([col("symbol")])
+        .select([col("stock_id")])
         .collect()?;
 
-    let symbols = df
-        .column("symbol")?
+    let stock_ids = df
+        .column("stock_id")?
         .str()?
         .no_null_iter()
         .collect::<Vec<&str>>();
@@ -45,11 +45,11 @@ pub fn fetch_financial_data(dataset: &str) -> Result<(), Box<dyn std::error::Err
     let token = env::var("FINMIND_API_TOKEN").ok().filter(|t| !t.is_empty());
     let mut dfs = Vec::new();
 
-    for &symbol in symbols.iter() {
+    for &stock_id in stock_ids.iter() {
         let mut times = 0;
 
         while times < 3 {
-            let request = build_request(symbol, &token, dataset);
+            let request = build_request(stock_id, &token, dataset);
             match request.call() {
                 Ok(mut response) => {
                     let value: Value = response.body_mut().read_json()?;
@@ -107,13 +107,7 @@ pub fn fetch_financial_data(dataset: &str) -> Result<(), Box<dyn std::error::Err
             lf
         };
 
-        let mut df = lf
-            .sort(
-                ["stock_id", "date"],
-                SortMultipleOptions::new().with_order_descending_multi([false, true]),
-            )
-            .collect()?;
-
+        let mut df = lf.collect()?;
         let writer = File::create(format!("{}.parquet", dataset))?;
         ParquetWriter::new(writer).finish(&mut df)?;
     }

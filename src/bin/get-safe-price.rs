@@ -1,7 +1,6 @@
 use divs_rs::safe_price;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    safe_price::run()?;
-
+    safe_price::calculate()?;
     Ok(())
 }
